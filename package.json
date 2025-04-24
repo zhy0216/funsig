@@ -1,0 +1,32 @@
+{
+  "name": "funsig",
+  "version": "1.0.0",
+  "description": "A tool to extract function signatures from code using tree-sitter",
+  "main": "dist/index.js",
+  "bin": {
+    "funsig": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "ts-node src/index.ts",
+    "dev": "ts-node src/index.ts",
+    "test": "ts-node tests/run-tests.ts",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "tree-sitter",
+    "parser",
+    "function",
+    "signature",
+    "ast"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "tree-sitter-javascript": "^0.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "typescript": "^5.3.3"
+  }
+}
