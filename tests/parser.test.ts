@@ -16,14 +16,6 @@ function normalizeFunctionDeclaration(func: FunctionDeclaration): any {
   // Convert absolute paths to relative for consistent comparison
   normalized.fileName = path.basename(normalized.fileName);
 
-  // Sort dependOn arrays for consistent comparison
-  if (normalized.dependOn && Array.isArray(normalized.dependOn)) {
-    normalized.dependOn.sort((a, b) => a - b);
-  } else if (!normalized.dependOn) {
-    // Ensure empty arrays for consistent comparison
-    normalized.dependOn = [];
-  }
-
   return normalized;
 }
 

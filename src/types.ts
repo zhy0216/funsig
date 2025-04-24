@@ -10,9 +10,9 @@ export interface FunctionDeclaration {
   lineNo: number;
   /** Path to the file containing the function */
   fileName: string;
-  /** Optional list of function IDs that this function depends on (not currently implemented) */
-  dependOn?: number[];
 }
+
+
 
 /**
  * Configuration options for the parser

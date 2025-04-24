@@ -2,31 +2,26 @@
   {
     "functionName": "add",
     "lineNo": 1,
-    "fileName": "sample.js",
-    "dependOn": []
+    "fileName": "sample.js"
   },
   {
     "functionName": "multiplyAndAdd",
     "lineNo": 1,
-    "fileName": "sample.js",
-    "dependOn": []
+    "fileName": "sample.js"
   },
   {
     "functionName": "constructor",
     "lineNo": 1,
-    "fileName": "sample.js",
-    "dependOn": []
+    "fileName": "sample.js"
   },
   {
     "functionName": "add",
     "lineNo": 1,
-    "fileName": "sample.js",
-    "dependOn": []
+    "fileName": "sample.js"
   },
   {
     "functionName": "clear",
     "lineNo": 1,
-    "fileName": "sample.js",
-    "dependOn": []
+    "fileName": "sample.js"
   }
 ]
