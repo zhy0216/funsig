@@ -10,6 +10,7 @@ export class CodeParser {
   private parser: Parser;
   private functionMap: Map<string, FunctionDeclaration>;
   private idCounter: number;
+  private languageModules: Map<string, any>;
 
   /**
    * Create a new CodeParser instance
@@ -18,16 +19,35 @@ export class CodeParser {
     this.parser = new Parser();
     this.functionMap = new Map();
     this.idCounter = 1;
+    this.languageModules = new Map();
   }
 
   /**
    * Initialize tree-sitter parser with specified language
-   * @param language Language name (e.g., 'javascript', 'python', etc.)
+   * @param language Language name (e.g., 'javascript', 'typescript', etc.)
    */
   async initParser(language: string): Promise<void> {
     try {
-      // Try to dynamically import the language grammar
-      const languageModule = require(`tree-sitter-${language}`);
+      // Return if language is already loaded
+      if (this.languageModules.has(language)) {
+        this.parser.setLanguage(this.languageModules.get(language));
+        return;
+      }
+
+      let languageModule;
+      
+      // Special handling for TypeScript which has separate modules for TS and TSX
+      if (language === 'typescript') {
+        languageModule = require('tree-sitter-typescript').typescript;
+      } else if (language === 'tsx') {
+        languageModule = require('tree-sitter-typescript').tsx;
+      } else {
+        // For other languages, try to load them directly
+        languageModule = require(`tree-sitter-${language}`);
+      }
+      
+      // Cache the language module for future use
+      this.languageModules.set(language, languageModule);
       
       // Set the parser's language
       this.parser.setLanguage(languageModule);
@@ -49,6 +69,10 @@ export class CodeParser {
         return 'javascript';
       case '.ts':
         return 'typescript';
+      case '.tsx':
+        return 'tsx';
+      case '.jsx':
+        return 'javascript'; // Use javascript parser for JSX files
       case '.py':
         return 'python';
       case '.rb':
@@ -100,15 +124,81 @@ export class CodeParser {
       
       // Check for function declarations based on node type
       switch (node.type) {
-        // JavaScript/TypeScript
+        // JavaScript/TypeScript: Regular function declarations
         case 'function_declaration':
-        case 'method_definition':
-        case 'generator_function_declaration':
-        case 'arrow_function':
           {
             const nameNode = node.childForFieldName('name');
             if (nameNode) {
               functionName = nameNode.text;
+              lineNo = getLineNumber(node.startPosition.row + 1);
+            }
+          }
+          break;
+        
+        // JavaScript/TypeScript: Methods in classes
+        case 'method_definition':
+          {
+            const nameNode = node.childForFieldName('name');
+            if (nameNode) {
+              functionName = nameNode.text;
+              lineNo = getLineNumber(node.startPosition.row + 1);
+            }
+          }
+          break;
+        
+        // JavaScript/TypeScript: Generator functions
+        case 'generator_function_declaration':
+          {
+            const nameNode = node.childForFieldName('name');
+            if (nameNode) {
+              functionName = nameNode.text;
+              lineNo = getLineNumber(node.startPosition.row + 1);
+            }
+          }
+          break;
+          
+        // JavaScript/TypeScript: Arrow functions with variable assignments
+        case 'variable_declaration':
+          {
+            const declarationNode = node.childForFieldName('declarator');
+            if (declarationNode) {
+              const nameNode = declarationNode.childForFieldName('name');
+              const valueNode = declarationNode.childForFieldName('value');
+              
+              if (nameNode && valueNode && valueNode.type === 'arrow_function') {
+                functionName = nameNode.text;
+                lineNo = getLineNumber(node.startPosition.row + 1);
+              }
+            }
+          }
+          break;
+          
+        // JavaScript/TypeScript: Arrow functions directly
+        case 'arrow_function':
+          {
+            // For arrow functions, we need to check if it's part of a variable declaration
+            // This is handled in the 'variable_declaration' case
+            // This case is for standalone arrow functions which usually don't have names
+          }
+          break;
+          
+        // TypeScript: Interface declaration
+        case 'interface_declaration':
+          {
+            const nameNode = node.childForFieldName('name');
+            if (nameNode) {
+              functionName = `interface:${nameNode.text}`;
+              lineNo = getLineNumber(node.startPosition.row + 1);
+            }
+          }
+          break;
+          
+        // TypeScript: Type alias declaration  
+        case 'type_alias_declaration':
+          {
+            const nameNode = node.childForFieldName('name');
+            if (nameNode) {
+              functionName = `type:${nameNode.text}`;
               lineNo = getLineNumber(node.startPosition.row + 1);
             }
           }
@@ -175,63 +265,6 @@ export class CodeParser {
   }
 
   /**
-   * Calculate dependencies between functions
-   * @param functions List of function declarations
-   * @param fileContent Content of the source file
-   */
-  calculateDependencies(
-    functions: FunctionDeclaration[],
-    fileContent: string
-  ): void {
-    // Simple approach: check if one function name appears in another function's body
-    for (const func of functions) {
-      const dependOn: number[] = [];
-      
-      for (const otherFunc of functions) {
-        if (func.id === otherFunc.id) continue;
-        
-        // Find the start and end of the function
-        const functionStartPattern = new RegExp(
-          `function\\s+${func.functionName}\\s*\\(|class\\s+${func.functionName}\\s+|${func.functionName}\\s*=\\s*function\\s*\\(|${func.functionName}\\s*=\\s*\\(`
-        );
-        const startMatch = functionStartPattern.exec(fileContent);
-        if (!startMatch) continue;
-        
-        const startPos = startMatch.index;
-        let endPos = fileContent.length;
-        let braceCount = 0;
-        let foundOpeningBrace = false;
-        
-        // Find the matching closing brace
-        for (let i = startPos; i < fileContent.length; i++) {
-          if (fileContent[i] === '{') {
-            foundOpeningBrace = true;
-            braceCount++;
-          } else if (fileContent[i] === '}') {
-            braceCount--;
-            if (foundOpeningBrace && braceCount === 0) {
-              endPos = i + 1;
-              break;
-            }
-          }
-        }
-        
-        // Check if other function name appears in this function's body
-        const functionBody = fileContent.substring(startPos, endPos);
-        const otherFuncPattern = new RegExp(`\\b${otherFunc.functionName}\\s*\\(`, 'g');
-        
-        if (otherFuncPattern.test(functionBody)) {
-          dependOn.push(otherFunc.id);
-        }
-      }
-      
-      if (dependOn.length > 0) {
-        func.dependOn = dependOn;
-      }
-    }
-  }
-
-  /**
    * Parse a single file to extract function declarations
    * @param filePath Path to the file
    * @param options Parser options
@@ -248,11 +281,6 @@ export class CodeParser {
       const tree = this.parser.parse(fileContent);
       
       const functions = this.extractFunctionDeclarations(tree, filePath, fileContent);
-      
-      if (options.calculateDependencies) {
-        this.calculateDependencies(functions, fileContent);
-      }
-      
       return functions;
     } catch (error) {
       console.error(`Error parsing file ${filePath}:`, error);

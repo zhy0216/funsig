@@ -10,7 +10,7 @@ export interface FunctionDeclaration {
   lineNo: number;
   /** Path to the file containing the function */
   fileName: string;
-  /** Optional list of function IDs that this function depends on */
+  /** Optional list of function IDs that this function depends on (not currently implemented) */
   dependOn?: number[];
 }
 
@@ -22,6 +22,4 @@ export interface ParserOptions {
   directory: string;
   /** File extensions to include */
   fileExtensions: string[];
-  /** Whether to calculate function dependencies */
-  calculateDependencies?: boolean;
 }

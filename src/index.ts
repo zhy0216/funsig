@@ -11,7 +11,6 @@ function parseArgs(): ParserOptions & { outputFile?: string } {
   const options: ParserOptions & { outputFile?: string } = {
     directory: '.',
     fileExtensions: ['.js', '.ts', '.jsx', '.tsx'],
-    calculateDependencies: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -24,8 +23,6 @@ function parseArgs(): ParserOptions & { outputFile?: string } {
       options.fileExtensions = extensionsStr
         .split(',')
         .map(ext => ext.startsWith('.') ? ext : `.${ext}`);
-    } else if (arg === '--dependencies' || arg === '--deps') {
-      options.calculateDependencies = true;
     } else if (arg === '--output' || arg === '-o') {
       options.outputFile = args[++i];
     } else if (arg === '--help' || arg === '-h') {
@@ -47,7 +44,6 @@ Options:
   --directory, -d <path>     Directory to search for files (default: current directory)
   --extensions, -e <list>    Comma-separated list of file extensions to include
                             (default: js,ts,jsx,tsx)
-  --dependencies, --deps     Calculate function dependencies
   --output, -o <file>        Output file path (default: stdout)
   --help, -h                 Show this help message
   `);
@@ -60,7 +56,6 @@ async function main(): Promise<void> {
     
     console.log(`Parsing directory: ${options.directory}`);
     console.log(`File extensions: ${options.fileExtensions.join(', ')}`);
-    console.log(`Calculate dependencies: ${options.calculateDependencies ? 'Yes' : 'No'}`);
     
     const functions = await parseDirectory(options);
     
