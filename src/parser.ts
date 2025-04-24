@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import Parser from "tree-sitter";
-import type { FunctionDeclaration, ClassDeclaration, FileDeclaration, ParserOptions } from './types';
+import type { FunctionDeclaration, ClassDeclaration, FileDeclaration, ParserOptions, ParameterInfo } from './types';
 
 // For TypeScript
 let JavaScript: any;
@@ -133,40 +133,62 @@ export class CodeParser {
     const functions: FunctionDeclaration[] = [];
     const classes: ClassDeclaration[] = [];
     
-    // Helper function to get line number
+    // Helper function to get line number (1-based)
     const getLineNumber = (pos: number): number => {
+      // Count newlines up to the position to get the line number
       return fileContent.substring(0, pos).split('\n').length;
     };
-    
-    // Traverse the AST to find functions and classes
+
+    // Build a map of comments for easier lookup
+    const commentMap = this.buildCommentMap(tree.rootNode, fileContent);
+
+    // Process the AST with visitors for function and class declarations
     this.traverseTree(tree.rootNode, {
       visitFunction: (node: any) => {
         const name = this.getNodeName(node, fileContent);
         if (name) {
+          // Get associated JSDoc comment if any
+          const jsDoc = this.findClosestComment(node, commentMap, fileContent);
+          
+          // Extract parameters, types, and return types
+          const params = this.extractParameters(node, fileContent, jsDoc);
+          const returnType = this.extractReturnType(node, fileContent, jsDoc);
+          
           functions.push({
             id: this.idCounter++,
             functionName: name,
-            lineNo: getLineNumber(node.startPosition.row + 1),
+            lineNo: getLineNumber(node.startPosition),
+            parameters: params,
+            returnType: returnType
           });
         }
       },
       visitClass: (node: any) => {
-        const name = this.getNodeName(node, fileContent);
-        if (name) {
-          const methods: FunctionDeclaration[] = [];
+        const className = this.getNodeName(node, fileContent);
+        if (className) {
+          const classMethods: FunctionDeclaration[] = [];
+          const classSignature = this.getClassSignature(node, fileContent);
+          const jsDoc = this.findClosestComment(node, commentMap, fileContent);
           
-          // Get class methods
+          // Process methods
           const body = node.childForFieldName('body');
           if (body) {
-            for (let i = 0; i < body.childCount; i++) {
-              const child = body.child(i);
+            for (let i = 0; i < body.namedChildCount; i++) {
+              const child = body.namedChild(i);
+              
               if (child && child.type === 'method_definition') {
                 const methodName = this.getNodeName(child, fileContent);
                 if (methodName) {
-                  methods.push({
+                  const methodJsDoc = this.findClosestComment(child, commentMap, fileContent);
+                  const params = this.extractParameters(child, fileContent, methodJsDoc);
+                  const returnType = this.extractReturnType(child, fileContent, methodJsDoc);
+                  
+                  classMethods.push({
                     id: this.idCounter++,
                     functionName: methodName,
-                    lineNo: getLineNumber(child.startPosition.row + 1),
+                    lineNo: getLineNumber(child.startPosition),
+                    parameters: params,
+                    returnType: returnType
                   });
                 }
               }
@@ -175,16 +197,82 @@ export class CodeParser {
           
           classes.push({
             id: this.idCounter++,
-            className: name,
-            lineNo: getLineNumber(node.startPosition.row + 1),
-            signature: this.getClassSignature(node, fileContent),
-            methods: methods
+            className,
+            lineNo: getLineNumber(node.startPosition),
+            signature: classSignature,
+            methods: classMethods
           });
         }
       }
-    });
+    }, fileContent);
     
     return { functions, classes };
+  }
+  
+  /**
+   * Build a map of comments in the file for faster lookup
+   */
+  private buildCommentMap(rootNode: any, fileContent: string): Map<number, string> {
+    const commentMap = new Map<number, string>();
+    
+    // First, extract comments directly from the file content using regex
+    // This ensures we catch all comments, including JSDoc
+    const commentRegex = /\/\*\*[\s\S]*?\*\/|\/\/[^\n]*/g;
+    let match;
+    
+    while ((match = commentRegex.exec(fileContent)) !== null) {
+      const commentText = match[0];
+      const commentEnd = match.index + commentText.length;
+      commentMap.set(commentEnd, commentText);
+    }
+    
+    // Also process the AST to make sure we get all comments
+    const processNode = (node: any) => {
+      if (!node) return;
+      
+      // Check if this is a comment node
+      if (node.type === 'comment' || node.type.includes('comment')) {
+        const commentText = fileContent.substring(node.startPosition, node.endPosition);
+        commentMap.set(node.endPosition, commentText);
+      }
+      
+      // Process children
+      for (let i = 0; i < node.childCount; i++) {
+        processNode(node.child(i));
+      }
+    };
+    
+    processNode(rootNode);
+    return commentMap;
+  }
+  
+  /**
+   * Find the closest comment before a node
+   */
+  private findClosestComment(node: any, commentMap: Map<number, string>, fileContent: string): string | null {
+    if (!node || !node.startPosition) return null;
+    
+    // Get the line number for this node
+    const nodeLine = fileContent.substring(0, node.startPosition).split('\n').length;
+    
+    // Look for the closest comment ending before this node starts
+    let closestComment = null;
+    let closestDistance = Infinity;
+    
+    for (const [commentEnd, commentText] of commentMap.entries()) {
+      if (commentEnd < node.startPosition) {
+        const commentEndLine = fileContent.substring(0, commentEnd).split('\n').length;
+        const distance = nodeLine - commentEndLine;
+        
+        // Consider comments that are within 10 lines of the node
+        if (distance >= 0 && distance < 10 && distance < closestDistance) {
+          closestDistance = distance;
+          closestComment = commentText;
+        }
+      }
+    }
+    
+    return closestComment;
   }
   
   /**
@@ -216,6 +304,152 @@ export class CodeParser {
   }
   
   /**
+   * Extract parameters from a function declaration node
+   */
+  private extractParameters(node: any, fileContent: string, jsDoc: string | null): ParameterInfo[] {
+    const parameters: ParameterInfo[] = [];
+    
+    // Find the formal parameters node
+    let formalParams: any = null;
+    
+    switch (node.type) {
+      case 'function_declaration':
+      case 'method_definition':
+        formalParams = node.childForFieldName('parameters');
+        break;
+      case 'variable_declarator':
+        // For arrow functions, we need to look at the value node (the function itself)
+        const valueNode = node.childForFieldName('value');
+        if (valueNode && (valueNode.type === 'arrow_function' || valueNode.type === 'function')) {
+          formalParams = valueNode.childForFieldName('parameters');
+        }
+        break;
+      case 'arrow_function':
+      case 'function':
+        formalParams = node.childForFieldName('parameters');
+        break;
+    }
+    
+    if (!formalParams) return parameters;
+    
+    // Look for JSDoc comments to get parameter types
+    const paramTypesMap = this.extractJSDocParamTypes(jsDoc);
+    
+    // Parse each parameter
+    for (let i = 0; i < formalParams.namedChildCount; i++) {
+      const param = formalParams.namedChild(i);
+      if (!param) continue;
+      
+      let paramName = '';
+      let paramType = '';
+      let isOptional = false;
+      
+      // Handle different parameter forms
+      if (param.type === 'identifier') {
+        // Simple parameter: function(a)
+        paramName = param.text;
+      } 
+      else if (param.type === 'assignment_pattern') {
+        // Parameter with default value: function(a = 1)
+        const leftNode = param.childForFieldName('left');
+        if (leftNode) {
+          paramName = leftNode.text;
+          isOptional = true;
+        }
+      }
+      else if (param.type === 'rest_parameter') {
+        // Rest parameter: function(...args)
+        const restNode = param.firstNamedChild;
+        if (restNode) {
+          paramName = restNode.text;
+          paramType = 'rest';
+        }
+      }
+      else if (param.type === 'object_pattern') {
+        // Destructured object parameter: function({a, b})
+        paramName = "{" + param.text + "}";
+        paramType = 'object';
+      }
+      else if (param.type === 'array_pattern') {
+        // Destructured array parameter: function([a, b])
+        paramName = "[" + param.text + "]";
+        paramType = 'array';
+      }
+      
+      // For TypeScript, check for type annotations
+      if (param.childForFieldName && param.childForFieldName('type')) {
+        const typeNode = param.childForFieldName('type');
+        if (typeNode) {
+          paramType = fileContent.substring(typeNode.startPosition, typeNode.endPosition);
+        }
+      }
+      
+      // If we have a JSDoc type for this parameter, use it
+      if (paramName && paramTypesMap.has(paramName)) {
+        paramType = paramTypesMap.get(paramName) || paramType;
+      }
+      
+      if (paramName) {
+        parameters.push({
+          name: paramName,
+          type: paramType || "", // Ensure type is never undefined
+          optional: isOptional
+        });
+      }
+    }
+    
+    return parameters;
+  }
+  
+  /**
+   * Extract JSDoc parameter types from a comment
+   */
+  private extractJSDocParamTypes(jsDoc: string | null): Map<string, string> {
+    const paramTypes = new Map<string, string>();
+    
+    if (!jsDoc) return paramTypes;
+    
+    // Find all @param annotations
+    // Updated regex to work with JSDoc format variations
+    const paramRegex = /@param\s+(?:\{([^}]+)\})?\s*(\w+)(?:\s+-\s*(.+))?/g;
+    let match;
+    
+    while ((match = paramRegex.exec(jsDoc)) !== null) {
+      if (match.length >= 3) {
+        const type = match[1] ? match[1].trim() : '';
+        const name = match[2].trim();
+        paramTypes.set(name, type);
+      }
+    }
+    
+    return paramTypes;
+  }
+  
+  /**
+   * Extract return type from a function declaration node
+   */
+  private extractReturnType(node: any, fileContent: string, jsDoc: string | null): string | undefined {
+    // Look for TypeScript return type annotations
+    if (node.childForFieldName && node.childForFieldName('return_type')) {
+      const returnTypeNode = node.childForFieldName('return_type');
+      if (returnTypeNode) {
+        return fileContent.substring(returnTypeNode.startPosition, returnTypeNode.endPosition);
+      }
+    }
+    
+    // For JavaScript, try to infer from JSDoc if available
+    if (jsDoc) {
+      // Extract return type from JSDoc - improved regex to match more JSDoc variations
+      const returnMatch = jsDoc.match(/@returns?\s+(?:\{([^}]+)\})?/);
+      if (returnMatch && returnMatch[1]) {
+        return returnMatch[1].trim();
+      }
+    }
+    
+    return undefined;
+  }
+  
+  /**
    * Helper method to get class signature
    */
   private getClassSignature(node: any, fileContent: string): string {
@@ -227,7 +461,7 @@ export class CodeParser {
       const endPos = bodyNode.startPosition;
       
       try {
-        return fileContent.substring(startPos.index, endPos.index).trim();
+        return fileContent.substring(startPos, endPos).trim();
       } catch (e) {
         return 'class ' + this.getNodeName(node, fileContent);
       }
@@ -244,7 +478,8 @@ export class CodeParser {
     visitors: { 
       visitFunction?: (node: any) => void, 
       visitClass?: (node: any) => void 
-    }
+    },
+    fileContent: string
   ) {
     if (!node) return;
     
@@ -272,7 +507,7 @@ export class CodeParser {
           // Skip this child node when recursively processing
           for (let i = 0; i < node.childCount; i++) {
             if (node.child(i) !== body) {
-              this.traverseTree(node.child(i), visitors);
+              this.traverseTree(node.child(i), visitors, fileContent);
             }
           }
           return; // Return early to skip the default child processing below
@@ -299,7 +534,7 @@ export class CodeParser {
     
     // Recursively process child nodes (unless we've already returned above)
     for (let i = 0; i < node.childCount; i++) {
-      this.traverseTree(node.child(i), visitors);
+      this.traverseTree(node.child(i), visitors, fileContent);
     }
   }
 

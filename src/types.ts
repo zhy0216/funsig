@@ -1,11 +1,10 @@
-
 export interface FileDeclaration {
   /** Path to the file */
   fileName: string;
   /** Functions defined in this file */
-  functions?: FunctionDeclaration[];
+  functions: FunctionDeclaration[];
   /** Classes defined in this file */
-  classes?: ClassDeclaration[];
+  classes: ClassDeclaration[];
 }
 
 /**
@@ -18,6 +17,22 @@ export interface FunctionDeclaration {
   functionName: string;
   /** Line number where the function is defined */
   lineNo: number;
+  /** Function parameters with their types (if available) */
+  parameters: ParameterInfo[];
+  /** Return type of the function (if available) */
+  returnType?: string;
+}
+
+/**
+ * Information about a function parameter
+ */
+export interface ParameterInfo {
+  /** Parameter name */
+  name: string;
+  /** Parameter type */
+  type: string;
+  /** Whether parameter is optional */
+  optional: boolean;
 }
 
 /**
@@ -31,9 +46,9 @@ export interface ClassDeclaration {
   /** Line number where the class is defined */
   lineNo: number;
   /** Class signature including extends/implements */
-  signature?: string;
+  signature: string;
   /** Methods defined in this class */
-  methods?: FunctionDeclaration[];
+  methods: FunctionDeclaration[];
 }
 
 /**
