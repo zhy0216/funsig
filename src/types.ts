@@ -20,6 +20,6 @@ export interface FunctionDeclaration {
 export interface ParserOptions {
   /** Directory to search for files */
   directory: string;
-  /** File extensions to include */
-  fileExtensions: string[];
+  /** File extensions to include (optional, will be auto-detected if not provided) */
+  fileExtensions?: string[];
 }

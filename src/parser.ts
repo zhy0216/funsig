@@ -1,7 +1,7 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import Parser = require("tree-sitter");
-import { FunctionDeclaration, ParserOptions } from './types';
+import fs from 'fs';
+import path from 'path';
+import Parser from "tree-sitter";
+import type { FunctionDeclaration, ParserOptions } from './types';
 
 /**
  * CodeParser class for extracting function signatures from code
@@ -38,12 +38,12 @@ export class CodeParser {
       
       // Special handling for TypeScript which has separate modules for TS and TSX
       if (language === 'typescript') {
-        languageModule = require('tree-sitter-typescript').typescript;
+        languageModule = await import('tree-sitter-typescript').then(module => module.typescript);
       } else if (language === 'tsx') {
-        languageModule = require('tree-sitter-typescript').tsx;
+        languageModule = await import('tree-sitter-typescript').then(module => module.tsx);
       } else {
         // For other languages, try to load them directly
-        languageModule = require(`tree-sitter-${language}`);
+        languageModule = await import(`tree-sitter-${language}`);
       }
       
       // Cache the language module for future use
@@ -238,7 +238,7 @@ export class CodeParser {
     let reachedRoot = false;
     
     while (!reachedRoot) {
-      processNode(cursor.currentNode());
+      processNode(cursor.currentNode);
       
       if (cursor.gotoFirstChild()) {
         continue;
@@ -271,7 +271,6 @@ export class CodeParser {
    */
   async parseFile(
     filePath: string,
-    options: ParserOptions
   ): Promise<FunctionDeclaration[]> {
     try {
       const language = this.getLanguageForFile(filePath);
@@ -315,6 +314,56 @@ export class CodeParser {
   }
 
   /**
+   * Detect file extensions present in a directory
+   * @param directory Directory to scan
+   * @returns Array of file extensions found (with leading dots)
+   */
+  async detectFileExtensions(directory: string): Promise<string[]> {
+    try {
+      // Set to track unique extensions
+      const extensions = new Set<string>();
+      
+      // Helper function to recursively scan directories
+      const scanDir = async (dir: string) => {
+        const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+        
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          
+          if (entry.isDirectory()) {
+            // Skip node_modules and hidden directories
+            if (entry.name === 'node_modules' || entry.name.startsWith('.')) {
+              continue;
+            }
+            await scanDir(fullPath);
+          } else if (entry.isFile()) {
+            const ext = path.extname(entry.name);
+            if (ext) {
+              extensions.add(ext);
+            }
+          }
+        }
+      };
+      
+      await scanDir(directory);
+      
+      // Convert set to array
+      const extensionsArray = Array.from(extensions);
+      
+      // If no extensions found, use default ones
+      if (extensionsArray.length === 0) {
+        return ['.js', '.ts', '.jsx', '.tsx'];
+      }
+      
+      return extensionsArray;
+    } catch (error) {
+      console.error(`Error detecting file extensions: ${error}`);
+      // Return default extensions on error
+      return ['.js', '.ts', '.jsx', '.tsx'];
+    }
+  }
+
+  /**
    * Parse all files in a directory to extract function declarations
    * @param options Parser options
    */
@@ -328,12 +377,18 @@ export class CodeParser {
       this.idCounter = 1;
       this.functionMap.clear();
       
+      // Detect file extensions if not provided
+      if (!options.fileExtensions || options.fileExtensions.length === 0) {
+        options.fileExtensions = await this.detectFileExtensions(options.directory);
+        console.log(`Detected file extensions: ${options.fileExtensions.join(', ')}`);
+      }
+      
       // Find all matching files
       const files = this.findFiles(options.directory, options.fileExtensions);
       
       // Parse each file
       for (const file of files) {
-        const functions = await this.parseFile(file, options);
+        const functions = await this.parseFile(file);
         allFunctions.push(...functions);
       }
       
@@ -346,13 +401,16 @@ export class CodeParser {
 }
 
 // Create singleton instances for compatibility with the existing code
-const parser = new CodeParser();
 
 // Export functions that use the singleton instance for backward compatibility
 export async function parseFile(filePath: string, options: ParserOptions): Promise<FunctionDeclaration[]> {
-  return parser.parseFile(filePath, options);
+  const parser = new CodeParser();
+
+  return parser.parseFile(filePath);
 }
 
 export async function parseDirectory(options: ParserOptions): Promise<FunctionDeclaration[]> {
+  const parser = new CodeParser();
+
   return parser.parseDirectory(options);
 }

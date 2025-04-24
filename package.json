@@ -10,8 +10,7 @@
     "check": "tsc",
     "start": "bun src/index.ts",
     "dev": "bun src/index.ts",
-    "test": "bun tests/run-tests.ts",
-    "prepare": "bun run build"
+    "test": "bun tests/run-tests.ts"
   },
   "keywords": [
     "tree-sitter",
@@ -27,6 +26,7 @@
     "tree-sitter-typescript": "^0.23.2"
   },
   "devDependencies": {
+    "@types/bun": "^1.2.10",
     "@types/node": "^20.10.5",
     "typescript": "^5.3.3"
   }

@@ -1,16 +1,16 @@
 #!/usr/bin/env bun
 
-import * as fs from 'fs';
-import * as path from 'path';
+import fs from 'fs';
+import path from 'path';
 import { parseDirectory } from './parser';
-import { ParserOptions } from './types';
+import type { ParserOptions } from './types';
 
 // Parse command line arguments
-function parseArgs(): ParserOptions & { outputFile?: string } {
+function parseArgs(): ParserOptions & { outputFile?: string, directorySpecified?: boolean } {
   const args = process.argv.slice(2);
-  const options: ParserOptions & { outputFile?: string } = {
+  const options: ParserOptions & { outputFile?: string, directorySpecified?: boolean } = {
     directory: '.',
-    fileExtensions: ['.js', '.ts', '.jsx', '.tsx'],
+    directorySpecified: false
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -18,11 +18,7 @@ function parseArgs(): ParserOptions & { outputFile?: string } {
     
     if (arg === '--directory' || arg === '-d') {
       options.directory = args[++i] || '.';
-    } else if (arg === '--extensions' || arg === '-e') {
-      const extensionsStr = args[++i] || '';
-      options.fileExtensions = extensionsStr
-        .split(',')
-        .map(ext => ext.startsWith('.') ? ext : `.${ext}`);
+      options.directorySpecified = true;
     } else if (arg === '--output' || arg === '-o') {
       options.outputFile = args[++i];
     } else if (arg === '--help' || arg === '-h') {
@@ -42,8 +38,6 @@ Usage: funsig [options]
 
 Options:
   --directory, -d <path>     Directory to search for files (default: current directory)
-  --extensions, -e <list>    Comma-separated list of file extensions to include
-                            (default: js,ts,jsx,tsx)
   --output, -o <file>        Output file path (default: stdout)
   --help, -h                 Show this help message
   `);
@@ -54,8 +48,15 @@ async function main(): Promise<void> {
   try {
     const options = parseArgs();
     
+    // Abort if no directory was explicitly specified
+    if (!options.directorySpecified) {
+      console.error('Error: No directory specified');
+      printHelp();
+      process.exit(1);
+      return;
+    }
+    
     console.log(`Parsing directory: ${options.directory}`);
-    console.log(`File extensions: ${options.fileExtensions.join(', ')}`);
     
     const functions = await parseDirectory(options);
     
