@@ -1,19 +1,31 @@
 [
   {
     "functionName": "add",
-    "lineNo": 9,
+    "lineNo": 8,
     "fileName": "sample.js",
     "dependOn": []
   },
   {
     "functionName": "multiplyAndAdd",
-    "lineNo": 19,
+    "lineNo": 18,
     "fileName": "sample.js",
     "dependOn": []
   },
   {
-    "functionName": "subtract",
-    "lineNo": 25,
+    "functionName": "constructor",
+    "lineNo": 30,
+    "fileName": "sample.js",
+    "dependOn": []
+  },
+  {
+    "functionName": "add",
+    "lineNo": 38,
+    "fileName": "sample.js",
+    "dependOn": []
+  },
+  {
+    "functionName": "clear",
+    "lineNo": 46,
     "fileName": "sample.js",
     "dependOn": []
   }
