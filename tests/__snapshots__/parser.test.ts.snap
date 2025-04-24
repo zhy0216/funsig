@@ -1,0 +1,93 @@
+// Bun Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Parser should parse JavaScript file correctly 1`] = `
+{
+  "classes": [
+    {
+      "className": "Calculator",
+      "lineNo": 1,
+      "methods": [
+        {
+          "functionName": "constructor",
+          "lineNo": 1,
+          "parameters": [],
+          "returnType": undefined,
+        },
+        {
+          "functionName": "add",
+          "lineNo": 1,
+          "parameters": [
+            {
+              "name": "value",
+              "optional": false,
+              "type": "",
+            },
+          ],
+          "returnType": undefined,
+        },
+        {
+          "functionName": "clear",
+          "lineNo": 1,
+          "parameters": [],
+          "returnType": undefined,
+        },
+      ],
+      "signature": "",
+    },
+  ],
+  "fileName": "sample.js",
+  "functions": [
+    {
+      "functionName": "add",
+      "lineNo": 1,
+      "parameters": [
+        {
+          "name": "a",
+          "optional": false,
+          "type": "",
+        },
+        {
+          "name": "b",
+          "optional": false,
+          "type": "",
+        },
+      ],
+      "returnType": undefined,
+    },
+    {
+      "functionName": "multiplyAndAdd",
+      "lineNo": 1,
+      "parameters": [
+        {
+          "name": "a",
+          "optional": false,
+          "type": "",
+        },
+        {
+          "name": "b",
+          "optional": false,
+          "type": "",
+        },
+      ],
+      "returnType": undefined,
+    },
+    {
+      "functionName": "subtract",
+      "lineNo": 1,
+      "parameters": [
+        {
+          "name": "a",
+          "optional": false,
+          "type": "",
+        },
+        {
+          "name": "b",
+          "optional": false,
+          "type": "",
+        },
+      ],
+      "returnType": undefined,
+    },
+  ],
+}
+`;
