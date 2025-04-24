@@ -7,11 +7,11 @@
     "funsig": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
-    "start": "ts-node src/index.ts",
-    "dev": "ts-node src/index.ts",
-    "test": "ts-node tests/run-tests.ts",
-    "prepare": "npm run build"
+    "check": "tsc",
+    "start": "bun src/index.ts",
+    "dev": "bun src/index.ts",
+    "test": "bun tests/run-tests.ts",
+    "prepare": "bun run build"
   },
   "keywords": [
     "tree-sitter",
