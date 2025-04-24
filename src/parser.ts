@@ -35,23 +35,23 @@ export class CodeParser {
       }
 
       let languageModule;
-      
+
       // Special handling for TypeScript which has separate modules for TS and TSX
       if (language === 'typescript') {
-        languageModule = await import('tree-sitter-typescript').then(module => module.typescript);
+        languageModule = require('tree-sitter-typescript').typescript;
       } else if (language === 'tsx') {
-        languageModule = await import('tree-sitter-typescript').then(module => module.tsx);
+        languageModule = require('tree-sitter-typescript').tsx;
       } else {
         // For other languages, try to load them directly
-        languageModule = await import(`tree-sitter-${language}`);
+        languageModule = require(`tree-sitter-${language}`);
       }
-      
+
       // Cache the language module for future use
       this.languageModules.set(language, languageModule);
-      
+
       // Set the parser's language
       this.parser.setLanguage(languageModule);
-      
+
     } catch (error) {
       console.error(`Failed to load language ${language}:`, error);
       throw new Error(`Unsupported language: ${language}. Make sure the tree-sitter-${language} module is installed.`);
@@ -64,7 +64,7 @@ export class CodeParser {
    */
   getLanguageForFile(filePath: string): string {
     const ext = path.extname(filePath).toLowerCase();
-    
+
     switch (ext) {
       case '.js':
         return 'javascript';
@@ -119,7 +119,7 @@ export class CodeParser {
   ): FunctionDeclaration[] {
     const functions: FunctionDeclaration[] = [];
     const cursor = tree.walk();
-    
+
     // Helper function to count lines
     const getLineNumber = (position: number): number => {
       return fileContent.substring(0, position).split('\n').length;
@@ -129,7 +129,7 @@ export class CodeParser {
     const processNode = (node: any) => {
       let functionName = '';
       let lineNo = 0;
-      
+
       // Check for function declarations based on node type
       switch (node.type) {
         // JavaScript/TypeScript: Regular function declarations
@@ -142,7 +142,7 @@ export class CodeParser {
             }
           }
           break;
-        
+
         // JavaScript/TypeScript: Methods in classes
         case 'method_definition':
           {
@@ -153,7 +153,7 @@ export class CodeParser {
             }
           }
           break;
-        
+
         // JavaScript/TypeScript: Generator functions
         case 'generator_function_declaration':
           {
@@ -164,7 +164,7 @@ export class CodeParser {
             }
           }
           break;
-          
+
         // JavaScript/TypeScript: Arrow functions with variable assignments
         case 'variable_declaration':
           {
@@ -172,7 +172,7 @@ export class CodeParser {
             if (declarationNode) {
               const nameNode = declarationNode.childForFieldName('name');
               const valueNode = declarationNode.childForFieldName('value');
-              
+
               if (nameNode && valueNode && valueNode.type === 'arrow_function') {
                 functionName = nameNode.text;
                 lineNo = getLineNumber(node.startPosition.row + 1);
@@ -180,7 +180,7 @@ export class CodeParser {
             }
           }
           break;
-          
+
         // JavaScript/TypeScript: Arrow functions directly
         case 'arrow_function':
           {
@@ -189,7 +189,7 @@ export class CodeParser {
             // This case is for standalone arrow functions which usually don't have names
           }
           break;
-          
+
         // TypeScript: Interface declaration
         case 'interface_declaration':
           {
@@ -200,8 +200,8 @@ export class CodeParser {
             }
           }
           break;
-          
-        // TypeScript: Type alias declaration  
+
+        // TypeScript: Type alias declaration
         case 'type_alias_declaration':
           {
             const nameNode = node.childForFieldName('name');
@@ -211,7 +211,7 @@ export class CodeParser {
             }
           }
           break;
-          
+
         // Python
         case 'function_definition':
           {
@@ -222,13 +222,13 @@ export class CodeParser {
             }
           }
           break;
-          
+
         // Add more language-specific function detection as needed
-        
+
         default:
           return;
       }
-      
+
       if (functionName && lineNo) {
         const funcDecl: FunctionDeclaration = {
           id: this.idCounter++,
@@ -236,39 +236,39 @@ export class CodeParser {
           lineNo,
           fileName: filePath,
         };
-        
+
         this.functionMap.set(`${filePath}:${functionName}`, funcDecl);
         functions.push(funcDecl);
       }
     };
-    
+
     // Process all nodes in the tree
     let reachedRoot = false;
-    
+
     while (!reachedRoot) {
       processNode(cursor.currentNode);
-      
+
       if (cursor.gotoFirstChild()) {
         continue;
       }
-      
+
       if (cursor.gotoNextSibling()) {
         continue;
       }
-      
+
       let retracing = true;
       while (retracing) {
         if (!cursor.gotoParent()) {
           reachedRoot = true;
           break;
         }
-        
+
         if (cursor.gotoNextSibling()) {
           retracing = false;
         }
       }
     }
-    
+
     return functions;
   }
 
@@ -282,18 +282,18 @@ export class CodeParser {
   ): Promise<FunctionDeclaration[]> {
     try {
       const language = this.getLanguageForFile(filePath);
-      
+
       // Skip JSON and unknown files
       if (language === 'json' || language === 'unknown') {
         console.log(`Skipping file ${filePath} with language ${language}`);
         return [];
       }
-      
+
       await this.initParser(language);
-      
+
       const fileContent = fs.readFileSync(filePath, 'utf8');
-      const tree = this.parser.parse(fileContent);
-      
+      const tree = await this.parser.parse(fileContent);
+
       const functions = this.extractFunctionDeclarations(tree, filePath, fileContent);
       return functions;
     } catch (error) {
@@ -309,12 +309,12 @@ export class CodeParser {
    */
   findFiles(directory: string, extensions: string[]): string[] {
     const results: string[] = [];
-    
+
     const items = fs.readdirSync(directory, { withFileTypes: true });
-    
+
     for (const item of items) {
       const itemPath = path.join(directory, item.name);
-      
+
       if (item.isDirectory()) {
         results.push(...this.findFiles(itemPath, extensions));
       } else if (
@@ -324,7 +324,7 @@ export class CodeParser {
         results.push(itemPath);
       }
     }
-    
+
     return results;
   }
 
@@ -337,14 +337,14 @@ export class CodeParser {
     try {
       // Set to track unique extensions
       const extensions = new Set<string>();
-      
+
       // Helper function to recursively scan directories
       const scanDir = async (dir: string) => {
         const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-        
+
         for (const entry of entries) {
           const fullPath = path.join(dir, entry.name);
-          
+
           if (entry.isDirectory()) {
             // Skip node_modules and hidden directories
             if (entry.name === 'node_modules' || entry.name.startsWith('.')) {
@@ -359,17 +359,17 @@ export class CodeParser {
           }
         }
       };
-      
+
       await scanDir(directory);
-      
+
       // Convert set to array
       const extensionsArray = Array.from(extensions);
-      
+
       // If no extensions found, use default ones
       if (extensionsArray.length === 0) {
         return ['.js', '.ts', '.jsx', '.tsx'];
       }
-      
+
       return extensionsArray;
     } catch (error) {
       console.error(`Error detecting file extensions: ${error}`);
@@ -386,27 +386,27 @@ export class CodeParser {
     options: ParserOptions
   ): Promise<FunctionDeclaration[]> {
     const allFunctions: FunctionDeclaration[] = [];
-    
+
     try {
       // Reset counter and map for a fresh run
       this.idCounter = 1;
       this.functionMap.clear();
-      
+
       // Detect file extensions if not provided
       if (!options.fileExtensions || options.fileExtensions.length === 0) {
         options.fileExtensions = await this.detectFileExtensions(options.directory);
         console.log(`Detected file extensions: ${options.fileExtensions.join(', ')}`);
       }
-      
+
       // Find all matching files
       const files = this.findFiles(options.directory, options.fileExtensions);
-      
+
       // Parse each file
       for (const file of files) {
         const functions = await this.parseFile(file);
         allFunctions.push(...functions);
       }
-      
+
       return allFunctions;
     } catch (error) {
       console.error('Error parsing directory:', error);
