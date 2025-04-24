@@ -1,3 +1,13 @@
+
+export interface FileDeclaration {
+  /** Path to the file */
+  fileName: string;
+  /** Functions defined in this file */
+  functions?: FunctionDeclaration[];
+  /** Classes defined in this file */
+  classes?: ClassDeclaration[];
+}
+
 /**
  * Represents a function declaration found in the codebase
  */
@@ -8,11 +18,23 @@ export interface FunctionDeclaration {
   functionName: string;
   /** Line number where the function is defined */
   lineNo: number;
-  /** Path to the file containing the function */
-  fileName: string;
 }
 
-
+/**
+ * Represents a class declaration found in the codebase
+ */
+export interface ClassDeclaration {
+  /** Unique identifier for the class */
+  id: number;
+  /** The name of the class */
+  className: string;
+  /** Line number where the class is defined */
+  lineNo: number;
+  /** Class signature including extends/implements */
+  signature?: string;
+  /** Methods defined in this class */
+  methods?: FunctionDeclaration[];
+}
 
 /**
  * Configuration options for the parser

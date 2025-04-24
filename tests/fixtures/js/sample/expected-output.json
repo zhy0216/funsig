@@ -1,27 +1,38 @@
-[
-  {
-    "functionName": "add",
-    "lineNo": 8,
-    "fileName": "sample.js"
-  },
-  {
-    "functionName": "multiplyAndAdd",
-    "lineNo": 18,
-    "fileName": "sample.js"
-  },
-  {
-    "functionName": "constructor",
-    "lineNo": 30,
-    "fileName": "sample.js"
-  },
-  {
-    "functionName": "add",
-    "lineNo": 38,
-    "fileName": "sample.js"
-  },
-  {
-    "functionName": "clear",
-    "lineNo": 46,
-    "fileName": "sample.js"
-  }
-]
+{
+  "fileName": "sample.js",
+  "functions": [
+    {
+      "functionName": "add",
+      "lineNo": 8
+    },
+    {
+      "functionName": "multiplyAndAdd",
+      "lineNo": 18
+    },
+    {
+      "functionName": "subtract",
+      "lineNo": 24
+    }
+  ],
+  "classes": [
+    {
+      "className": "Calculator",
+      "lineNo": 29,
+      "signature": "class Calculator",
+      "methods": [
+        {
+          "functionName": "constructor",
+          "lineNo": 30
+        },
+        {
+          "functionName": "add",
+          "lineNo": 38
+        },
+        {
+          "functionName": "clear",
+          "lineNo": 46
+        }
+      ]
+    }
+  ]
+}

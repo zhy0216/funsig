@@ -1,14 +1,17 @@
 import fs from 'fs';
 import path from 'path';
 import Parser from "tree-sitter";
-import type { FunctionDeclaration, ParserOptions } from './types';
+import type { FunctionDeclaration, ClassDeclaration, FileDeclaration, ParserOptions } from './types';
+
+// For TypeScript
+let JavaScript: any;
+let TypeScript: any;
 
 /**
  * CodeParser class for extracting function signatures from code
  */
 export class CodeParser {
   private parser: Parser;
-  private functionMap: Map<string, FunctionDeclaration>;
   private idCounter: number;
   private languageModules: Map<string, any>;
 
@@ -17,7 +20,6 @@ export class CodeParser {
    */
   constructor() {
     this.parser = new Parser();
-    this.functionMap = new Map();
     this.idCounter = 1;
     this.languageModules = new Map();
   }
@@ -38,9 +40,20 @@ export class CodeParser {
 
       // Special handling for TypeScript which has separate modules for TS and TSX
       if (language === 'typescript') {
-        languageModule = require('tree-sitter-typescript').typescript;
+        if (!TypeScript) {
+          TypeScript = require('tree-sitter-typescript').typescript;
+        }
+        languageModule = TypeScript;
       } else if (language === 'tsx') {
-        languageModule = require('tree-sitter-typescript').tsx;
+        if (!TypeScript) {
+          TypeScript = require('tree-sitter-typescript').tsx;
+        }
+        languageModule = TypeScript;
+      } else if (language === 'javascript') {
+        if (!JavaScript) {
+          JavaScript = require('tree-sitter-javascript');
+        }
+        languageModule = JavaScript;
       } else {
         // For other languages, try to load them directly
         languageModule = require(`tree-sitter-${language}`);
@@ -107,198 +120,225 @@ export class CodeParser {
   }
 
   /**
-   * Extract function declarations from a syntax tree
+   * Extract function and class declarations from a syntax tree
    * @param tree The parsed syntax tree
    * @param filePath Path to the source file
    * @param fileContent Content of the source file
    */
-  extractFunctionDeclarations(
+  extractDeclarations(
     tree: any,
     filePath: string,
     fileContent: string
-  ): FunctionDeclaration[] {
+  ): { functions: FunctionDeclaration[], classes: ClassDeclaration[] } {
     const functions: FunctionDeclaration[] = [];
-    const cursor = tree.walk();
-
-    // Helper function to count lines
-    const getLineNumber = (position: number): number => {
-      return fileContent.substring(0, position).split('\n').length;
+    const classes: ClassDeclaration[] = [];
+    
+    // Helper function to get line number
+    const getLineNumber = (pos: number): number => {
+      return fileContent.substring(0, pos).split('\n').length;
     };
-
-    // Function to process function declarations based on language
-    const processNode = (node: any) => {
-      let functionName = '';
-      let lineNo = 0;
-
-      // Check for function declarations based on node type
-      switch (node.type) {
-        // JavaScript/TypeScript: Regular function declarations
-        case 'function_declaration':
-          {
-            const nameNode = node.childForFieldName('name');
-            if (nameNode) {
-              functionName = nameNode.text;
-              lineNo = getLineNumber(node.startPosition.row + 1);
-            }
-          }
-          break;
-
-        // JavaScript/TypeScript: Methods in classes
-        case 'method_definition':
-          {
-            const nameNode = node.childForFieldName('name');
-            if (nameNode) {
-              functionName = nameNode.text;
-              lineNo = getLineNumber(node.startPosition.row + 1);
-            }
-          }
-          break;
-
-        // JavaScript/TypeScript: Generator functions
-        case 'generator_function_declaration':
-          {
-            const nameNode = node.childForFieldName('name');
-            if (nameNode) {
-              functionName = nameNode.text;
-              lineNo = getLineNumber(node.startPosition.row + 1);
-            }
-          }
-          break;
-
-        // JavaScript/TypeScript: Arrow functions with variable assignments
-        case 'variable_declaration':
-          {
-            const declarationNode = node.childForFieldName('declarator');
-            if (declarationNode) {
-              const nameNode = declarationNode.childForFieldName('name');
-              const valueNode = declarationNode.childForFieldName('value');
-
-              if (nameNode && valueNode && valueNode.type === 'arrow_function') {
-                functionName = nameNode.text;
-                lineNo = getLineNumber(node.startPosition.row + 1);
+    
+    // Traverse the AST to find functions and classes
+    this.traverseTree(tree.rootNode, {
+      visitFunction: (node: any) => {
+        const name = this.getNodeName(node, fileContent);
+        if (name) {
+          functions.push({
+            id: this.idCounter++,
+            functionName: name,
+            lineNo: getLineNumber(node.startPosition.row + 1),
+          });
+        }
+      },
+      visitClass: (node: any) => {
+        const name = this.getNodeName(node, fileContent);
+        if (name) {
+          const methods: FunctionDeclaration[] = [];
+          
+          // Get class methods
+          const body = node.childForFieldName('body');
+          if (body) {
+            for (let i = 0; i < body.childCount; i++) {
+              const child = body.child(i);
+              if (child && child.type === 'method_definition') {
+                const methodName = this.getNodeName(child, fileContent);
+                if (methodName) {
+                  methods.push({
+                    id: this.idCounter++,
+                    functionName: methodName,
+                    lineNo: getLineNumber(child.startPosition.row + 1),
+                  });
+                }
               }
             }
           }
-          break;
-
-        // JavaScript/TypeScript: Arrow functions directly
-        case 'arrow_function':
-          {
-            // For arrow functions, we need to check if it's part of a variable declaration
-            // This is handled in the 'variable_declaration' case
-            // This case is for standalone arrow functions which usually don't have names
-          }
-          break;
-
-        // TypeScript: Interface declaration
-        case 'interface_declaration':
-          {
-            const nameNode = node.childForFieldName('name');
-            if (nameNode) {
-              functionName = `interface:${nameNode.text}`;
-              lineNo = getLineNumber(node.startPosition.row + 1);
-            }
-          }
-          break;
-
-        // TypeScript: Type alias declaration
-        case 'type_alias_declaration':
-          {
-            const nameNode = node.childForFieldName('name');
-            if (nameNode) {
-              functionName = `type:${nameNode.text}`;
-              lineNo = getLineNumber(node.startPosition.row + 1);
-            }
-          }
-          break;
-
-        // Python
-        case 'function_definition':
-          {
-            const nameNode = node.childForFieldName('name');
-            if (nameNode) {
-              functionName = nameNode.text;
-              lineNo = getLineNumber(node.startPosition.row + 1);
-            }
-          }
-          break;
-
-        // Add more language-specific function detection as needed
-
-        default:
-          return;
-      }
-
-      if (functionName && lineNo) {
-        const funcDecl: FunctionDeclaration = {
-          id: this.idCounter++,
-          functionName,
-          lineNo,
-          fileName: filePath,
-        };
-
-        this.functionMap.set(`${filePath}:${functionName}`, funcDecl);
-        functions.push(funcDecl);
-      }
-    };
-
-    // Process all nodes in the tree
-    let reachedRoot = false;
-
-    while (!reachedRoot) {
-      processNode(cursor.currentNode);
-
-      if (cursor.gotoFirstChild()) {
-        continue;
-      }
-
-      if (cursor.gotoNextSibling()) {
-        continue;
-      }
-
-      let retracing = true;
-      while (retracing) {
-        if (!cursor.gotoParent()) {
-          reachedRoot = true;
-          break;
+          
+          classes.push({
+            id: this.idCounter++,
+            className: name,
+            lineNo: getLineNumber(node.startPosition.row + 1),
+            signature: this.getClassSignature(node, fileContent),
+            methods: methods
+          });
         }
-
-        if (cursor.gotoNextSibling()) {
-          retracing = false;
-        }
+      }
+    });
+    
+    return { functions, classes };
+  }
+  
+  /**
+   * Helper method to get the name of a node
+   */
+  private getNodeName(node: any, fileContent: string): string {
+    if (!node) return '';
+    
+    let nameNode = null;
+    
+    switch (node.type) {
+      case 'function_declaration':
+      case 'class_declaration':
+        nameNode = node.firstNamedChild;
+        break;
+      case 'method_definition':
+        nameNode = node.firstNamedChild;
+        break;
+      case 'variable_declarator':
+        nameNode = node.firstNamedChild;
+        break;
+    }
+    
+    if (nameNode && nameNode.text) {
+      return nameNode.text;
+    }
+    
+    return '';
+  }
+  
+  /**
+   * Helper method to get class signature
+   */
+  private getClassSignature(node: any, fileContent: string): string {
+    if (!node || node.type !== 'class_declaration') return '';
+    
+    const bodyNode = node.childForFieldName('body');
+    if (bodyNode) {
+      const startPos = node.startPosition;
+      const endPos = bodyNode.startPosition;
+      
+      try {
+        return fileContent.substring(startPos.index, endPos.index).trim();
+      } catch (e) {
+        return 'class ' + this.getNodeName(node, fileContent);
       }
     }
-
-    return functions;
+    
+    return 'class ' + this.getNodeName(node, fileContent);
+  }
+  
+  /**
+   * Traverse the AST with visitors for different node types
+   */
+  private traverseTree(
+    node: any, 
+    visitors: { 
+      visitFunction?: (node: any) => void, 
+      visitClass?: (node: any) => void 
+    }
+  ) {
+    if (!node) return;
+    
+    // Skip method_definition nodes in the top-level traversal
+    // because they'll be handled within class visitor
+    if (node.type === 'method_definition' && 
+        (!node.parent || node.parent.type !== 'class_body')) {
+      if (visitors.visitFunction) {
+        visitors.visitFunction(node);
+      }
+    }
+    else switch (node.type) {
+      case 'function_declaration':
+        if (visitors.visitFunction) {
+          visitors.visitFunction(node);
+        }
+        break;
+      case 'class_declaration':
+        if (visitors.visitClass) {
+          visitors.visitClass(node);
+        }
+        // Skip traversing into class body to avoid processing methods twice
+        const body = node.childForFieldName('body');
+        if (body) {
+          // Skip this child node when recursively processing
+          for (let i = 0; i < node.childCount; i++) {
+            if (node.child(i) !== body) {
+              this.traverseTree(node.child(i), visitors);
+            }
+          }
+          return; // Return early to skip the default child processing below
+        }
+        break;
+      case 'variable_declaration':
+      case 'lexical_declaration':
+        for (let i = 0; i < node.namedChildCount; i++) {
+          const declarator = node.namedChild(i);
+          if (declarator && declarator.type === 'variable_declarator') {
+            // Check if it's a function assignment
+            const valueNode = declarator.lastNamedChild;
+            if (valueNode && 
+                (valueNode.type === 'arrow_function' || 
+                 valueNode.type === 'function')) {
+              if (visitors.visitFunction) {
+                visitors.visitFunction(declarator);
+              }
+            }
+          }
+        }
+        break;
+    }
+    
+    // Recursively process child nodes (unless we've already returned above)
+    for (let i = 0; i < node.childCount; i++) {
+      this.traverseTree(node.child(i), visitors);
+    }
   }
 
   /**
-   * Parse a single file to extract function declarations
+   * Parse a single file to extract function and class declarations
    * @param filePath Path to the file
-   * @param options Parser options
    */
   async parseFile(
     filePath: string,
-  ): Promise<FunctionDeclaration[]> {
+  ): Promise<FileDeclaration> {
     try {
+      // Get the appropriate language parser
       const language = this.getLanguageForFile(filePath);
-
-      // Skip JSON and unknown files
-      if (language === 'json' || language === 'unknown') {
-        console.log(`Skipping file ${filePath} with language ${language}`);
-        return [];
+      if (language === 'unknown' || language === 'json') {
+        // Skip unsupported files
+        return { fileName: filePath, functions: [], classes: [] };
       }
 
+      // Initialize the parser with the correct language
       await this.initParser(language);
 
+      // Read the file
       const fileContent = fs.readFileSync(filePath, 'utf8');
-      const tree = await this.parser.parse(fileContent);
 
-      const functions = this.extractFunctionDeclarations(tree, filePath, fileContent);
-      return functions;
+      // Parse the code
+      const tree = this.parser.parse(fileContent);
+
+      // Extract declarations
+      const { functions, classes } = this.extractDeclarations(tree, filePath, fileContent);
+      
+      // Return as a FileDeclaration
+      return {
+        fileName: filePath,
+        functions,
+        classes
+      };
     } catch (error) {
       console.error(`Error parsing file ${filePath}:`, error);
-      return [];
+      return { fileName: filePath, functions: [], classes: [] };
     }
   }
 
@@ -379,18 +419,17 @@ export class CodeParser {
   }
 
   /**
-   * Parse all files in a directory to extract function declarations
+   * Parse all files in a directory to extract function and class declarations
    * @param options Parser options
    */
   async parseDirectory(
     options: ParserOptions
-  ): Promise<FunctionDeclaration[]> {
-    const allFunctions: FunctionDeclaration[] = [];
+  ): Promise<FileDeclaration[]> {
+    const fileDeclarations: FileDeclaration[] = [];
 
     try {
-      // Reset counter and map for a fresh run
+      // Reset counter for a fresh run
       this.idCounter = 1;
-      this.functionMap.clear();
 
       // Detect file extensions if not provided
       if (!options.fileExtensions || options.fileExtensions.length === 0) {
@@ -403,11 +442,11 @@ export class CodeParser {
 
       // Parse each file
       for (const file of files) {
-        const functions = await this.parseFile(file);
-        allFunctions.push(...functions);
+        const fileDeclaration = await this.parseFile(file);
+        fileDeclarations.push(fileDeclaration);
       }
 
-      return allFunctions;
+      return fileDeclarations;
     } catch (error) {
       console.error('Error parsing directory:', error);
       return [];
@@ -415,17 +454,13 @@ export class CodeParser {
   }
 }
 
-// Create singleton instances for compatibility with the existing code
-
 // Export functions that use the singleton instance for backward compatibility
-export async function parseFile(filePath: string, options: ParserOptions): Promise<FunctionDeclaration[]> {
+export async function parseFile(filePath: string, options: ParserOptions): Promise<FileDeclaration> {
   const parser = new CodeParser();
-
   return parser.parseFile(filePath);
 }
 
-export async function parseDirectory(options: ParserOptions): Promise<FunctionDeclaration[]> {
+export async function parseDirectory(options: ParserOptions): Promise<FileDeclaration[]> {
   const parser = new CodeParser();
-
   return parser.parseDirectory(options);
 }
