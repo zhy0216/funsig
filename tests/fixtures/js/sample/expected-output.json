@@ -1,0 +1,20 @@
+[
+  {
+    "functionName": "add",
+    "lineNo": 9,
+    "fileName": "sample.js",
+    "dependOn": []
+  },
+  {
+    "functionName": "multiplyAndAdd",
+    "lineNo": 19,
+    "fileName": "sample.js",
+    "dependOn": []
+  },
+  {
+    "functionName": "subtract",
+    "lineNo": 25,
+    "fileName": "sample.js",
+    "dependOn": []
+  }
+]

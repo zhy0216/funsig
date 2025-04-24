@@ -1,0 +1,32 @@
+[
+  {
+    "functionName": "constructor",
+    "lineNo": 10,
+    "fileName": "class-sample.js",
+    "dependOn": []
+  },
+  {
+    "functionName": "add",
+    "lineNo": 20,
+    "fileName": "class-sample.js",
+    "dependOn": []
+  },
+  {
+    "functionName": "subtract",
+    "lineNo": 31,
+    "fileName": "class-sample.js",
+    "dependOn": []
+  },
+  {
+    "functionName": "clear",
+    "lineNo": 41,
+    "fileName": "class-sample.js",
+    "dependOn": []
+  },
+  {
+    "functionName": "getHistory",
+    "lineNo": 50,
+    "fileName": "class-sample.js",
+    "dependOn": []
+  }
+]

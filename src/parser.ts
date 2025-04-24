@@ -59,26 +59,27 @@ export class CodeParser {
   }
 
   /**
-   * Get the appropriate language for a file based on its extension
+   * Get the language for a file based on its extension
    * @param filePath Path to the file
    */
   getLanguageForFile(filePath: string): string {
     const ext = path.extname(filePath).toLowerCase();
+    
     switch (ext) {
       case '.js':
         return 'javascript';
       case '.ts':
         return 'typescript';
-      case '.tsx':
-        return 'tsx';
       case '.jsx':
-        return 'javascript'; // Use javascript parser for JSX files
+        return 'javascript';
+      case '.tsx':
+        return 'tsx';  // TypeScript with JSX
       case '.py':
         return 'python';
       case '.rb':
         return 'ruby';
-      case '.go':
-        return 'go';
+      case '.java':
+        return 'java';
       case '.c':
       case '.h':
         return 'c';
@@ -86,15 +87,22 @@ export class CodeParser {
       case '.hpp':
       case '.cc':
         return 'cpp';
-      case '.java':
-        return 'java';
+      case '.cs':
+        return 'c_sharp';
+      case '.go':
+        return 'go';
       case '.php':
         return 'php';
       case '.rs':
         return 'rust';
+      case '.json':
+        // Skip JSON files or handle differently
+        console.warn(`Skipping JSON file: ${filePath}`);
+        return 'json'; // Not actually used but prevents the error
       // Add more languages as needed
       default:
-        throw new Error(`Unsupported file extension: ${ext}`);
+        console.warn(`Unsupported file extension: ${ext} for file ${filePath}, skipping...`);
+        return 'unknown';
     }
   }
 
@@ -274,6 +282,13 @@ export class CodeParser {
   ): Promise<FunctionDeclaration[]> {
     try {
       const language = this.getLanguageForFile(filePath);
+      
+      // Skip JSON and unknown files
+      if (language === 'json' || language === 'unknown') {
+        console.log(`Skipping file ${filePath} with language ${language}`);
+        return [];
+      }
+      
       await this.initParser(language);
       
       const fileContent = fs.readFileSync(filePath, 'utf8');
