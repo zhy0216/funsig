@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import * as path from 'path';
 import * as fs from 'fs';
-import { parseFile, parseDirectory } from '../src/parser';
+import { parseFile } from '../src/parser';
 import type { ParserOptions, FunctionDeclaration, FileDeclaration } from '../src/types';
 
 /**
@@ -47,25 +47,10 @@ function normalizeClassDeclaration(classDecl: any): any {
   return normalizedWithoutId;
 }
 
-/**
- * Save actual parse results to a file for debugging and updating expected results
- */
-function saveActualResults(result: FileDeclaration, fixtureName: string, subFolder: string = 'sample'): void {
-  const normalizedResult = normalizeFileDeclaration(result);
-  const outputPath = path.join(__dirname, 'fixtures', 'js', subFolder, `actual-${fixtureName}.json`);
-  try {
-    fs.writeFileSync(outputPath, JSON.stringify(normalizedResult, null, 2));
-    console.log(`Saved actual results to ${outputPath}`);
-  } catch (error) {
-    console.error(`Error saving results: ${error}`);
-  }
-}
-
 describe('Parser', () => {
   // Test fixture setup
   const jsFixturesDir = path.join(__dirname, 'fixtures', 'js');
   const sampleFixtureDir = path.join(jsFixturesDir, 'sample');
-  const classesFixtureDir = path.join(jsFixturesDir, 'classes');
 
   test('should parse JavaScript file correctly', async () => {
     const sampleJsPath = path.join(sampleFixtureDir, 'sample.js');
@@ -76,9 +61,6 @@ describe('Parser', () => {
     };
 
     const parseResult = await parseFile(sampleJsPath, options);
-
-    // Save actual results for debugging
-    saveActualResults(parseResult, 'sample', 'sample');
 
     // Read expected results
     const expectedContent = fs.readFileSync(expectedOutputPath, 'utf8');
