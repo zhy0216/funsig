@@ -2,7 +2,6 @@ import { describe, expect, test, beforeAll } from "bun:test";
 import * as path from 'path';
 import * as fs from 'fs';
 import { parseDirectory } from '../src/parser';
-import { readdir } from "node:fs/promises";
 
 import type { ParserOptions, FunctionDeclaration, FileDeclaration } from '../src/types';
 
@@ -46,21 +45,12 @@ function normalizeClassDeclaration(classDecl: any): any {
   return normalizedWithoutId;
 }
 
-// Define test case interface
-interface TestCase {
-  language: string;
-  extension: string;
-  fixturePath: string;
-  sampleFile: string;
-  description: string;
-}
+const fixturesDir = path.join(__dirname, 'fixtures');
+const langDirs = fs.readdirSync(fixturesDir);
 
-describe('Parser', async () => {
-  const fixturesDir = path.join(__dirname, 'fixtures');
-  const langDirs = await readdir(fixturesDir);
-
-  for(const lang of langDirs) {
-    const exampleDirs = await readdir(path.join(fixturesDir, lang));
+for(const lang of langDirs) {
+  describe(lang, async () => {
+    const exampleDirs = fs.readdirSync(path.join(fixturesDir, lang));
     for (const exampleDirName of exampleDirs) {
       const exampleDir = path.join(fixturesDir, lang, exampleDirName)
       test(exampleDir, async () => {
@@ -82,5 +72,5 @@ describe('Parser', async () => {
         expect(normalizedResult).toMatchSnapshot();
       });
     }
-  }
-});
+  })
+}

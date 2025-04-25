@@ -1,6 +1,6 @@
 // Bun Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`Parser /Users/yang/workspace/funsig/tests/fixtures/js/sample 1`] = `
+exports[`js /Users/yang/workspace/funsig/tests/fixtures/js/sample 1`] = `
 [
   {
     "classes": [
@@ -87,6 +87,67 @@ exports[`Parser /Users/yang/workspace/funsig/tests/fixtures/js/sample 1`] = `
             "type": "",
           },
         ],
+        "returnType": undefined,
+      },
+    ],
+  },
+]
+`;
+
+exports[`ts /Users/yang/workspace/funsig/tests/fixtures/ts/sample 1`] = `
+[
+  {
+    "classes": [
+      {
+        "className": "UserManager",
+        "lineNo": 1,
+        "methods": [
+          {
+            "functionName": "public",
+            "lineNo": 1,
+            "parameters": [],
+            "returnType": "",
+          },
+          {
+            "functionName": "public",
+            "lineNo": 1,
+            "parameters": [],
+            "returnType": "",
+          },
+          {
+            "functionName": "public",
+            "lineNo": 1,
+            "parameters": [],
+            "returnType": "",
+          },
+        ],
+        "signature": "",
+      },
+    ],
+    "fileName": "sample.ts",
+    "functions": [
+      {
+        "functionName": "add",
+        "lineNo": 1,
+        "parameters": [],
+        "returnType": "",
+      },
+      {
+        "functionName": "processItems",
+        "lineNo": 1,
+        "parameters": [],
+        "returnType": "",
+      },
+      {
+        "functionName": "multiply",
+        "lineNo": 1,
+        "parameters": [],
+        "returnType": undefined,
+      },
+      {
+        "functionName": "constructor",
+        "lineNo": 1,
+        "parameters": [],
         "returnType": undefined,
       },
     ],
