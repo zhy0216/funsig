@@ -103,22 +103,34 @@ exports[`ts /Users/yang/workspace/funsig/tests/fixtures/ts/sample 1`] = `
         "lineNo": 1,
         "methods": [
           {
-            "functionName": "public",
+            "functionName": "addUser",
             "lineNo": 1,
-            "parameters": [],
-            "returnType": "",
+            "parameters": [
+              {
+                "name": "user",
+                "optional": false,
+                "type": "Person",
+              },
+            ],
+            "returnType": "void",
           },
           {
-            "functionName": "public",
+            "functionName": "getUserByName",
             "lineNo": 1,
-            "parameters": [],
-            "returnType": "",
+            "parameters": [
+              {
+                "name": "name",
+                "optional": false,
+                "type": "string",
+              },
+            ],
+            "returnType": "Person | undefined",
           },
           {
-            "functionName": "public",
+            "functionName": "getAllUsers",
             "lineNo": 1,
             "parameters": [],
-            "returnType": "",
+            "returnType": "ReadonlyArray<Person>",
           },
         ],
         "signature": "",
@@ -129,25 +141,59 @@ exports[`ts /Users/yang/workspace/funsig/tests/fixtures/ts/sample 1`] = `
       {
         "functionName": "add",
         "lineNo": 1,
-        "parameters": [],
-        "returnType": "",
+        "parameters": [
+          {
+            "name": "a",
+            "optional": false,
+            "type": "number",
+          },
+          {
+            "name": "b",
+            "optional": false,
+            "type": "number",
+          },
+        ],
+        "returnType": "number",
       },
       {
         "functionName": "processItems",
         "lineNo": 1,
-        "parameters": [],
-        "returnType": "",
+        "parameters": [
+          {
+            "name": "items",
+            "optional": false,
+            "type": "T[]",
+          },
+        ],
+        "returnType": "string[]",
       },
       {
         "functionName": "multiply",
         "lineNo": 1,
-        "parameters": [],
-        "returnType": undefined,
+        "parameters": [
+          {
+            "name": "a",
+            "optional": false,
+            "type": "number",
+          },
+          {
+            "name": "b",
+            "optional": false,
+            "type": "number",
+          },
+        ],
+        "returnType": "number",
       },
       {
         "functionName": "constructor",
         "lineNo": 1,
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "serviceUrl",
+            "optional": false,
+            "type": "",
+          },
+        ],
         "returnType": undefined,
       },
     ],

@@ -135,24 +135,125 @@ export class CodeParser {
     
     // Helper function to get line number (1-based)
     const getLineNumber = (pos: number): number => {
-      // Count newlines up to the position to get the line number
       return fileContent.substring(0, pos).split('\n').length;
     };
-
-    // Build a map of comments for easier lookup
+    
+    // Build a map of comments for faster lookups
     const commentMap = this.buildCommentMap(tree.rootNode, fileContent);
-
-    // Process the AST with visitors for function and class declarations
-    this.traverseTree(tree.rootNode, {
+    
+    // Check if this is a TypeScript file by extension
+    const isTypeScript = filePath.endsWith('.ts') || filePath.endsWith('.tsx');
+    
+    // If it's TypeScript, try to extract type information directly from the source code
+    const typeInfo: { [key: string]: { params: { [name: string]: string }, returnType: string } } = {};
+    
+    if (isTypeScript) {
+      // Extract function declarations with types
+      const functionRegex = /function\s+(\w+)\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^{]+)/g;
+      let match;
+      
+      while ((match = functionRegex.exec(fileContent)) !== null) {
+        const funcName = match[1];
+        const paramsStr = match[2];
+        const returnType = match[3].trim();
+        
+        // Extract parameters and their types
+        const params: { [name: string]: string } = {};
+        paramsStr.split(',').forEach(param => {
+          const parts = param.trim().split(':');
+          if (parts.length >= 2) {
+            const paramName = parts[0].trim();
+            const paramType = parts[1].trim();
+            params[paramName] = paramType;
+          }
+        });
+        
+        typeInfo[funcName] = { params, returnType };
+      }
+      
+      // Extract arrow functions with types
+      const arrowRegex = /(?:const|let|var)\s+(\w+)\s*=\s*\(([^)]*)\)\s*:\s*([^=]+?)\s*=>/g;
+      
+      while ((match = arrowRegex.exec(fileContent)) !== null) {
+        const funcName = match[1];
+        const paramsStr = match[2];
+        const returnType = match[3].trim();
+        
+        // Extract parameters and their types
+        const params: { [name: string]: string } = {};
+        paramsStr.split(',').forEach(param => {
+          const parts = param.trim().split(':');
+          if (parts.length >= 2) {
+            const paramName = parts[0].trim();
+            const paramType = parts[1].trim();
+            params[paramName] = paramType;
+          }
+        });
+        
+        typeInfo[funcName] = { params, returnType };
+      }
+      
+      // Extract class methods with types
+      const classMethodRegex = /\b(public|private|protected)?\s*(\w+)\s*\(([^)]*)\)\s*:\s*([^{]+)/g;
+      
+      while ((match = classMethodRegex.exec(fileContent)) !== null) {
+        const methodName = match[2];
+        const paramsStr = match[3];
+        const returnType = match[4].trim();
+        
+        // Skip constructor since it doesn't conform to the pattern well
+        if (methodName === 'constructor') continue;
+        
+        // Extract parameters and their types
+        const params: { [name: string]: string } = {};
+        paramsStr.split(',').forEach(param => {
+          const parts = param.trim().split(':');
+          if (parts.length >= 2) {
+            const paramName = parts[0].trim();
+            const paramType = parts[1].trim();
+            params[paramName] = paramType;
+          }
+        });
+        
+        typeInfo[methodName] = { params, returnType };
+      }
+    }
+    
+    // Define visitors for different node types
+    const visitors = {
       visitFunction: (node: any) => {
         const name = this.getNodeName(node, fileContent);
         if (name) {
           // Get associated JSDoc comment if any
           const jsDoc = this.findClosestComment(node, commentMap, fileContent);
           
-          // Extract parameters, types, and return types
-          const params = this.extractParameters(node, fileContent, jsDoc);
-          const returnType = this.extractReturnType(node, fileContent, jsDoc);
+          // Extract parameters and return type
+          let params = this.extractParameters(node, fileContent, jsDoc);
+          let returnType = this.extractReturnType(node, fileContent, jsDoc);
+          
+          // For TypeScript, check if we have extracted type info for this function
+          if (isTypeScript && typeInfo[name]) {
+            // If we have TypeScript type information, use it to enhance the parameters
+            const funcTypeInfo = typeInfo[name];
+            
+            // Add type information to parameters
+            if (funcTypeInfo.params) {
+              params = params.map(param => {
+                if (param.name && funcTypeInfo.params[param.name]) {
+                  return {
+                    ...param,
+                    type: funcTypeInfo.params[param.name]
+                  };
+                }
+                return param;
+              });
+            }
+            
+            // Add return type information
+            if (funcTypeInfo.returnType && (!returnType || returnType === '')) {
+              returnType = funcTypeInfo.returnType;
+            }
+          }
           
           functions.push({
             id: this.idCounter++,
@@ -163,6 +264,7 @@ export class CodeParser {
           });
         }
       },
+      
       visitClass: (node: any) => {
         const className = this.getNodeName(node, fileContent);
         if (className) {
@@ -170,22 +272,137 @@ export class CodeParser {
           const classSignature = this.getClassSignature(node, fileContent);
           const jsDoc = this.findClosestComment(node, commentMap, fileContent);
           
-          // Process methods
+          // Process methods and properties
           const body = node.childForFieldName('body');
           if (body) {
             for (let i = 0; i < body.namedChildCount; i++) {
               const child = body.namedChild(i);
               
-              if (child && child.type === 'method_definition') {
+              if (!child) continue;
+              
+              if (child.type === 'method_definition') {
+                // Class method
                 const methodName = this.getNodeName(child, fileContent);
                 if (methodName) {
                   const methodJsDoc = this.findClosestComment(child, commentMap, fileContent);
-                  const params = this.extractParameters(child, fileContent, methodJsDoc);
-                  const returnType = this.extractReturnType(child, fileContent, methodJsDoc);
+                  let params = this.extractParameters(child, fileContent, methodJsDoc);
+                  let returnType = this.extractReturnType(child, fileContent, methodJsDoc);
+                  
+                  // For TypeScript, check if we have extracted type info for this method
+                  if (isTypeScript && typeInfo[methodName]) {
+                    // If we have TypeScript type information, use it to enhance the parameters
+                    const methodTypeInfo = typeInfo[methodName];
+                    
+                    // Add type information to parameters
+                    if (methodTypeInfo.params) {
+                      params = params.map(param => {
+                        if (param.name && methodTypeInfo.params[param.name]) {
+                          return {
+                            ...param,
+                            type: methodTypeInfo.params[param.name]
+                          };
+                        }
+                        return param;
+                      });
+                    }
+                    
+                    // Add return type information
+                    if (methodTypeInfo.returnType && (!returnType || returnType === '')) {
+                      returnType = methodTypeInfo.returnType;
+                    }
+                  }
                   
                   classMethods.push({
                     id: this.idCounter++,
                     functionName: methodName,
+                    lineNo: getLineNumber(child.startPosition),
+                    parameters: params,
+                    returnType: returnType
+                  });
+                }
+              } 
+              else if (child.type === 'property_definition' && child.childForFieldName('value')) {
+                // Class property with method assignment (arrow function)
+                const propName = this.getNodeName(child, fileContent);
+                const valueNode = child.childForFieldName('value');
+                
+                if (propName && valueNode && 
+                    (valueNode.type === 'arrow_function' || valueNode.type === 'function')) {
+                  const methodJsDoc = this.findClosestComment(child, commentMap, fileContent);
+                  let params = this.extractParameters(valueNode, fileContent, methodJsDoc);
+                  let returnType = this.extractReturnType(valueNode, fileContent, methodJsDoc);
+                  
+                  // For TypeScript, check if we have extracted type info for this property method
+                  if (isTypeScript && typeInfo[propName]) {
+                    // If we have TypeScript type information, use it to enhance the parameters
+                    const propTypeInfo = typeInfo[propName];
+                    
+                    // Add type information to parameters
+                    if (propTypeInfo.params) {
+                      params = params.map(param => {
+                        if (param.name && propTypeInfo.params[param.name]) {
+                          return {
+                            ...param,
+                            type: propTypeInfo.params[param.name]
+                          };
+                        }
+                        return param;
+                      });
+                    }
+                    
+                    // Add return type information
+                    if (propTypeInfo.returnType && (!returnType || returnType === '')) {
+                      returnType = propTypeInfo.returnType;
+                    }
+                  }
+                  
+                  classMethods.push({
+                    id: this.idCounter++,
+                    functionName: propName,
+                    lineNo: getLineNumber(child.startPosition),
+                    parameters: params,
+                    returnType: returnType
+                  });
+                }
+              }
+              else if (child.type === 'method_signature' || child.type === 'property_signature') {
+                // Interface method or property with function type
+                const memberName = this.getNodeName(child, fileContent);
+                const typeNode = child.childForFieldName('type');
+                
+                if (memberName && typeNode && 
+                    (typeNode.type === 'function_type' || child.type === 'method_signature')) {
+                  const methodJsDoc = this.findClosestComment(child, commentMap, fileContent);
+                  let params = this.extractParameters(child, fileContent, methodJsDoc);
+                  let returnType = this.extractReturnType(child, fileContent, methodJsDoc);
+                  
+                  // For TypeScript, check if we have extracted type info for this interface method
+                  if (isTypeScript && typeInfo[memberName]) {
+                    // If we have TypeScript type information, use it to enhance the parameters
+                    const memberTypeInfo = typeInfo[memberName];
+                    
+                    // Add type information to parameters
+                    if (memberTypeInfo.params) {
+                      params = params.map(param => {
+                        if (param.name && memberTypeInfo.params[param.name]) {
+                          return {
+                            ...param,
+                            type: memberTypeInfo.params[param.name]
+                          };
+                        }
+                        return param;
+                      });
+                    }
+                    
+                    // Add return type information
+                    if (memberTypeInfo.returnType && (!returnType || returnType === '')) {
+                      returnType = memberTypeInfo.returnType;
+                    }
+                  }
+                  
+                  classMethods.push({
+                    id: this.idCounter++,
+                    functionName: memberName,
                     lineNo: getLineNumber(child.startPosition),
                     parameters: params,
                     returnType: returnType
@@ -204,7 +421,10 @@ export class CodeParser {
           });
         }
       }
-    }, fileContent);
+    };
+    
+    // Traverse the syntax tree with our visitors
+    this.traverseTree(tree.rootNode, visitors, fileContent);
     
     return { functions, classes };
   }
@@ -286,13 +506,20 @@ export class CodeParser {
     switch (node.type) {
       case 'function_declaration':
       case 'class_declaration':
-        nameNode = node.firstNamedChild;
+      case 'interface_declaration':
+      case 'enum_declaration':
+        nameNode = node.childForFieldName('name');
         break;
       case 'method_definition':
-        nameNode = node.firstNamedChild;
+        // Handle TypeScript style methods with modifiers (public, private, protected)
+        nameNode = node.childForFieldName('name');
         break;
       case 'variable_declarator':
         nameNode = node.firstNamedChild;
+        break;
+      case 'property_signature':
+      case 'property_definition':
+        nameNode = node.childForFieldName('name');
         break;
     }
     
@@ -315,6 +542,7 @@ export class CodeParser {
     switch (node.type) {
       case 'function_declaration':
       case 'method_definition':
+      case 'method_signature':  // TypeScript interface method
         formalParams = node.childForFieldName('parameters');
         break;
       case 'variable_declarator':
@@ -326,7 +554,15 @@ export class CodeParser {
         break;
       case 'arrow_function':
       case 'function':
+      case 'function_type':  // TypeScript function type
         formalParams = node.childForFieldName('parameters');
+        break;
+      case 'property_signature':  // TypeScript interface property
+        // Check if it has a function type
+        const typeNode = node.childForFieldName('type');
+        if (typeNode && typeNode.type === 'function_type') {
+          formalParams = typeNode.childForFieldName('parameters');
+        }
         break;
     }
     
@@ -344,10 +580,34 @@ export class CodeParser {
       let paramType = '';
       let isOptional = false;
       
+      // Helper function to extract type annotation text
+      const extractTypeAnnotation = (typeNode: any): string => {
+        if (!typeNode || !fileContent) return '';
+        
+        // For TypeScript, the type annotation often starts with a colon
+        // We want to extract just the type, not the colon
+        let typeText = fileContent.substring(typeNode.startPosition, typeNode.endPosition).trim();
+        
+        // If the type annotation starts with a colon, remove it
+        if (typeText.startsWith(':')) {
+          typeText = typeText.substring(1).trim();
+        }
+        
+        return typeText;
+      };
+      
       // Handle different parameter forms
       if (param.type === 'identifier') {
         // Simple parameter: function(a)
         paramName = param.text;
+        
+        // Check for TypeScript type annotation
+        if (param.childForFieldName && param.childForFieldName('type')) {
+          const typeNode = param.childForFieldName('type');
+          if (typeNode) {
+            paramType = extractTypeAnnotation(typeNode);
+          }
+        }
       } 
       else if (param.type === 'assignment_pattern') {
         // Parameter with default value: function(a = 1)
@@ -355,6 +615,14 @@ export class CodeParser {
         if (leftNode) {
           paramName = leftNode.text;
           isOptional = true;
+          
+          // Check for TypeScript type annotation
+          if (leftNode.childForFieldName && leftNode.childForFieldName('type')) {
+            const typeNode = leftNode.childForFieldName('type');
+            if (typeNode) {
+              paramType = extractTypeAnnotation(typeNode);
+            }
+          }
         }
       }
       else if (param.type === 'rest_parameter') {
@@ -363,6 +631,14 @@ export class CodeParser {
         if (restNode) {
           paramName = restNode.text;
           paramType = 'rest';
+          
+          // Check for TypeScript type annotation
+          if (param.childForFieldName && param.childForFieldName('type')) {
+            const typeNode = param.childForFieldName('type');
+            if (typeNode) {
+              paramType = extractTypeAnnotation(typeNode);
+            }
+          }
         }
       }
       else if (param.type === 'object_pattern') {
@@ -375,18 +651,56 @@ export class CodeParser {
         paramName = "[" + param.text + "]";
         paramType = 'array';
       }
-      
-      // For TypeScript, check for type annotations
-      if (param.childForFieldName && param.childForFieldName('type')) {
+      else if (param.type === 'required_parameter') {
+        // TypeScript required parameter with type annotation
+        const patternNode = param.childForFieldName('pattern');
+        if (patternNode) {
+          paramName = patternNode.text;
+        }
+        
+        // Get the type annotation
         const typeNode = param.childForFieldName('type');
         if (typeNode) {
-          paramType = fileContent.substring(typeNode.startPosition, typeNode.endPosition);
+          paramType = extractTypeAnnotation(typeNode);
+        }
+      }
+      else if (param.type === 'optional_parameter') {
+        // TypeScript optional parameter: function(a?: string)
+        const patternNode = param.childForFieldName('pattern');
+        if (patternNode) {
+          paramName = patternNode.text;
+          isOptional = true;
+        }
+        
+        // Get the type annotation
+        const typeNode = param.childForFieldName('type');
+        if (typeNode) {
+          paramType = extractTypeAnnotation(typeNode);
+        }
+      }
+      else if (param.type === 'parameter') {
+        // TypeScript/JavaScript parameter
+        // Try to get name from the pattern field
+        const patternNode = param.childForFieldName('pattern') || param.firstNamedChild;
+        if (patternNode) {
+          paramName = patternNode.text;
+        }
+        
+        // Check for optional flag
+        if (param.childForFieldName && param.childForFieldName('question') !== null) {
+          isOptional = true;
+        }
+        
+        // Get the type annotation
+        const typeNode = param.childForFieldName('type');
+        if (typeNode) {
+          paramType = extractTypeAnnotation(typeNode);
         }
       }
       
-      // If we have a JSDoc type for this parameter, use it
-      if (paramName && paramTypesMap.has(paramName)) {
-        paramType = paramTypesMap.get(paramName) || paramType;
+      // If we have a JSDoc type for this parameter, use it if TypeScript type is not present
+      if (paramName && paramTypesMap.has(paramName) && !paramType) {
+        paramType = paramTypesMap.get(paramName) || "";
       }
       
       if (paramName) {
@@ -429,24 +743,87 @@ export class CodeParser {
    * Extract return type from a function declaration node
    */
   private extractReturnType(node: any, fileContent: string, jsDoc: string | null): string | undefined {
-    // Look for TypeScript return type annotations
-    if (node.childForFieldName && node.childForFieldName('return_type')) {
-      const returnTypeNode = node.childForFieldName('return_type');
+    // Helper function to clean up type annotation text
+    const cleanTypeAnnotation = (typeText: string): string => {
+      // For TypeScript, the type annotation often starts with a colon
+      // We want to extract just the type, not the colon
+      let cleanType = typeText.trim();
+      
+      // If the type annotation starts with a colon, remove it
+      if (cleanType.startsWith(':')) {
+        cleanType = cleanType.substring(1).trim();
+      }
+      
+      return cleanType;
+    };
+
+    // Helper function to extract type from a node
+    const extractTypeFromNode = (node: any): string | undefined => {
+      if (!node || !fileContent) return undefined;
+      
+      // TypeScript return type annotation is either directly in return_type or in type_annotation
+      const returnTypeNode = node.childForFieldName('return_type') || 
+                           node.childForFieldName('type_annotation') ||
+                           node.childForFieldName('type');
+      
       if (returnTypeNode) {
-        return fileContent.substring(returnTypeNode.startPosition, returnTypeNode.endPosition);
+        return cleanTypeAnnotation(fileContent.substring(returnTypeNode.startPosition, returnTypeNode.endPosition));
       }
+      return undefined;
+    };
+    
+    // First check for explicit return type in the code
+    let returnType: string | undefined = undefined;
+    
+    switch (node.type) {
+      case 'function_declaration':
+      case 'method_definition':
+      case 'method_signature':
+        returnType = extractTypeFromNode(node);
+        break;
+      case 'variable_declarator':
+        // For arrow functions or function expressions, check the value node
+        const valueNode = node.childForFieldName('value');
+        if (valueNode) {
+          if (valueNode.type === 'arrow_function' || valueNode.type === 'function') {
+            returnType = extractTypeFromNode(valueNode);
+          }
+        }
+        break;
+      case 'arrow_function':
+      case 'function':
+        returnType = extractTypeFromNode(node);
+        break;
+      case 'property_signature':
+        // TypeScript interface property with function type
+        const typeNode = node.childForFieldName('type');
+        if (typeNode && typeNode.type === 'function_type') {
+          const fnReturnTypeNode = typeNode.childForFieldName('return_type');
+          if (fnReturnTypeNode && fileContent) {
+            returnType = cleanTypeAnnotation(fileContent.substring(fnReturnTypeNode.startPosition, fnReturnTypeNode.endPosition));
+          }
+        } else {
+          returnType = extractTypeFromNode(node);
+        }
+        break;
+      case 'function_type':
+        // Direct function type (e.g., in type aliases or interfaces)
+        const fnTypeReturnNode = node.childForFieldName('return_type');
+        if (fnTypeReturnNode && fileContent) {
+          returnType = cleanTypeAnnotation(fileContent.substring(fnTypeReturnNode.startPosition, fnTypeReturnNode.endPosition));
+        }
+        break;
     }
     
-    // For JavaScript, try to infer from JSDoc if available
-    if (jsDoc) {
-      // Extract return type from JSDoc - improved regex to match more JSDoc variations
-      const returnMatch = jsDoc.match(/@returns?\s+(?:\{([^}]+)\})?/);
+    // If no explicit return type, check JSDoc for @returns
+    if (!returnType && jsDoc) {
+      const returnMatch = jsDoc.match(/@returns?\s+{([^}]+)}/i);
       if (returnMatch && returnMatch[1]) {
-        return returnMatch[1].trim();
+        returnType = returnMatch[1].trim();
       }
     }
     
-    return undefined;
+    return returnType;
   }
   
   /**
@@ -516,8 +893,7 @@ export class CodeParser {
             // Check if it's a function assignment
             const valueNode = declarator.lastNamedChild;
             if (valueNode && 
-                (valueNode.type === 'arrow_function' || 
-                 valueNode.type === 'function')) {
+                (valueNode.type === 'arrow_function' || valueNode.type === 'function')) {
               if (visitors.visitFunction) {
                 visitors.visitFunction(declarator);
               }
@@ -525,13 +901,7 @@ export class CodeParser {
           }
         }
         break;
-      // TypeScript specific node types
-      case 'interface_declaration':
-        if (visitors.visitClass) {
-          // We treat interfaces similar to classes for documentation purposes
-          visitors.visitClass(node);
-        }
-        break;
+      // TypeScript specific node types - removed interface_declaration processing
       case 'type_alias_declaration':
         // Check if the type alias is for a function type
         const typeNode = node.childForFieldName('value');
