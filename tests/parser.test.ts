@@ -1,21 +1,21 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, beforeAll } from "bun:test";
 import * as path from 'path';
-import { parseFile } from '../src/parser';
+import * as fs from 'fs';
+import { parseDirectory } from '../src/parser';
+import { readdir } from "node:fs/promises";
+
 import type { ParserOptions, FunctionDeclaration, FileDeclaration } from '../src/types';
 
 /**
  * Normalize a file declaration for comparison
  * This removes or normalizes fields that might vary between test runs
  */
-function normalizeFileDeclaration(fileDecl: FileDeclaration): any {
-  // Create a normalized copy
-  const normalized = {
+function normalizeFileDeclaration(fileDecls: FileDeclaration[]): any {
+  return fileDecls.map(fileDecl => ({
     fileName: path.basename(fileDecl.fileName),
     functions: fileDecl.functions.map(func => normalizeFunctionDeclaration(func)),
     classes: fileDecl.classes.map(cls => normalizeClassDeclaration(cls))
-  };
-
-  return normalized;
+  }))
 }
 
 /**
@@ -46,25 +46,41 @@ function normalizeClassDeclaration(classDecl: any): any {
   return normalizedWithoutId;
 }
 
-describe('Parser', () => {
-  // Test fixture setup
-  const jsFixturesDir = path.join(__dirname, 'fixtures', 'js');
-  const sampleFixtureDir = path.join(jsFixturesDir, 'sample');
+// Define test case interface
+interface TestCase {
+  language: string;
+  extension: string;
+  fixturePath: string;
+  sampleFile: string;
+  description: string;
+}
 
-  test('should parse JavaScript file correctly', async () => {
-    const sampleJsPath = path.join(sampleFixtureDir, 'sample.js');
+describe('Parser', async () => {
+  const fixturesDir = path.join(__dirname, 'fixtures');
+  const langDirs = await readdir(fixturesDir);
 
-    const options: ParserOptions = {
-      directory: sampleFixtureDir,
-    };
-
-    const parseResult = await parseFile(sampleJsPath, options);
-
-    // Normalize results for comparison
-    const normalizedResult = normalizeFileDeclaration(parseResult);
-
-    expect(normalizedResult).toMatchSnapshot();
-
-  });
-
+  for(const lang of langDirs) {
+    const exampleDirs = await readdir(path.join(fixturesDir, lang));
+    for (const exampleDirName of exampleDirs) {
+      const exampleDir = path.join(fixturesDir, lang, exampleDirName)
+      test(exampleDir, async () => {
+        // Skip if sample file doesn't exist
+        if (!fs.existsSync(exampleDir)) {
+          console.log(`Skipping fixtureDir test: sample file not found at ${exampleDir}`);
+          return;
+        }
+        
+        const options: ParserOptions = {
+          directory: exampleDir,
+        };
+        
+        const parseResult = await parseDirectory(options);
+        
+        // Normalize results for comparison
+        const normalizedResult = normalizeFileDeclaration(parseResult);
+        
+        expect(normalizedResult).toMatchSnapshot();
+      });
+    }
+  }
 });

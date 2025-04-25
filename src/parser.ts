@@ -483,16 +483,11 @@ export class CodeParser {
   ) {
     if (!node) return;
     
-    // Skip method_definition nodes in the top-level traversal
-    // because they'll be handled within class visitor
-    if (node.type === 'method_definition' && 
-        (!node.parent || node.parent.type !== 'class_body')) {
-      if (visitors.visitFunction) {
-        visitors.visitFunction(node);
-      }
-    }
-    else switch (node.type) {
+    switch (node.type) {
       case 'function_declaration':
+      case 'method_definition':
+      case 'generator_function_declaration':
+      case 'function':
         if (visitors.visitFunction) {
           visitors.visitFunction(node);
         }
@@ -528,6 +523,37 @@ export class CodeParser {
               }
             }
           }
+        }
+        break;
+      // TypeScript specific node types
+      case 'interface_declaration':
+        if (visitors.visitClass) {
+          // We treat interfaces similar to classes for documentation purposes
+          visitors.visitClass(node);
+        }
+        break;
+      case 'type_alias_declaration':
+        // Check if the type alias is for a function type
+        const typeNode = node.childForFieldName('value');
+        if (typeNode && (
+            typeNode.type === 'function_type' || 
+            typeNode.type === 'arrow_function')) {
+          if (visitors.visitFunction) {
+            visitors.visitFunction(node);
+          }
+        }
+        break;
+      case 'export_statement':
+        // Process exports to find functions or classes being exported
+        for (let i = 0; i < node.childCount; i++) {
+          this.traverseTree(node.child(i), visitors, fileContent);
+        }
+        // Return early to avoid duplicate processing
+        return;
+      case 'enum_declaration':
+        // Handle TypeScript enums like classes
+        if (visitors.visitClass) {
+          visitors.visitClass(node);
         }
         break;
     }
